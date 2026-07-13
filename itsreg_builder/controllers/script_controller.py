@@ -106,12 +106,12 @@ class ScriptController:
         if not title:
             title = f"state-{state}"
 
-        messages = self._prompt_messages()
-        options = self._prompt_options()
+        messages = self._prompt_messages(state)
+        options = self._prompt_options(state)
         edges: list[Edge] = []
 
         edge_index = 1
-        while prompts.confirm(f"Add outgoing edge #{edge_index}?", default=False):
+        while prompts.confirm(f"Node {state}: Add outgoing edge #{edge_index}?", default=False):
             edge = self._prompt_single_edge(state, edge_index)
             if edge:
                 edges.append(edge)
@@ -134,10 +134,11 @@ class ScriptController:
         nodes_by_state[state] = node
         in_progress.discard(state)
 
-    def _prompt_messages(self) -> list[Message]:
+    def _prompt_messages(self, state: int | None = None) -> list[Message]:
+        prefix = f"Node {state}: " if state is not None else ""
         messages: list[Message] = []
         while True:
-            label = "Message text (opens editor)" if not messages else "Next message (opens editor)"
+            label = f"{prefix}Message text (opens editor)" if not messages else f"{prefix}Next message (opens editor)"
             text = prompts.editor(label)
             if text:
                 messages.append(Message(text=text))
@@ -145,19 +146,21 @@ class ScriptController:
             if not messages:
                 display.warning("  At least one message is required.")
                 continue
-            if not prompts.confirm("Add another message?", default=False):
+            if not prompts.confirm(f"{prefix}Add another message?", default=False):
                 break
         return messages
 
-    def _prompt_options(self) -> list[str]:
+    def _prompt_options(self, state: int | None = None) -> list[str]:
+        prefix = f"Node {state}: " if state is not None else ""
         options: list[str] = []
-        while prompts.confirm("Add a button option?", default=False):
-            opt = prompts.text("Button text")
+        while prompts.confirm(f"{prefix}Add a button option?", default=False):
+            opt = prompts.text(f"{prefix}Button text")
             if opt:
                 options.append(opt)
         return options
 
     def _prompt_single_edge(self, source_state: int, index: int) -> Edge | None:
+        prefix = f"Node {source_state}, Edge #{index}"
         pred_type = prompts.select_predicate_type()
         if pred_type is None:
             return None
@@ -165,17 +168,17 @@ class ScriptController:
         if pred_type == "always":
             predicate = AlwaysPredicate()
         elif pred_type == "exact":
-            txt = prompts.text(f"Edge #{index} - Expected text", default="")
+            txt = prompts.text(f"{prefix} - Expected text", default="")
             if txt is None:
                 return None
             predicate = ExactPredicate(text=txt)
         else:
-            pat = prompts.text(f"Edge #{index} - Regex pattern", default=".*")
+            pat = prompts.text(f"{prefix} - Regex pattern", default=".*")
             if pat is None:
                 return None
             predicate = RegexPredicate(pattern=pat)
 
-        to_state = prompts.integer(f"Edge #{index} - Target state", default=source_state + 1)
+        to_state = prompts.integer(f"{prefix} - Target state", default=source_state + 1)
         if to_state is None:
             return None
 
