@@ -6,17 +6,13 @@
 
 ```bash
 # Установка зависимостей
-make install
+uv sync
 
 # Запуск (создает или загружает дефолтный script.json)
-make run
+uv run itsreg-builder
 
 # Запуск с указанием конкретного файла
-make run ARGS=my_scenario.json
-
-# Или прямой запуск через Python
-python -m itsreg_builder script.json
-
+uv run itsreg-builder my_scenario.json
 ```
 
 Конструктор создает JSON-файл, соответствующий формату `CreateScriptRequest` в [itsreg API v3](https://itsreg.itsbmstu.ru/api/v3/swagger-ui/).

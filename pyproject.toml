@@ -1,0 +1,17 @@
+[project]
+name = "itsreg-builder"
+version = "0.1.0"
+description = "Interactive TUI for building itsreg bot scenario JSON files"
+requires-python = ">=3.11"
+dependencies = [
+    "inquirer3>=0.5,<1.0",
+    "rich>=13.0,<14.0",
+    "pydantic>=2.0,<3.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+itsreg-builder = "itsreg_builder.__main__:main"
