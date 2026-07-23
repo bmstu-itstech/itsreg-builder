@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import inquirer3
+import inquirer3  # type: ignore[import-untyped]
 
+from itsreg_builder.models.script import Node
 
 MAIN_ACTIONS = [
     "Add node",
@@ -11,9 +12,8 @@ MAIN_ACTIONS = [
     "Delete edge",
     "Add entry",
     "Delete entry",
-    "Show script",
-    "Show JSON",
-    "Creation wizard",
+    "Show graph",
+    "View node",
     "Exit",
 ]
 
@@ -32,14 +32,16 @@ OPERATION_CHOICES = [
 
 def select_main_action() -> str | None:
     try:
-        return inquirer3.list_input(message="Select action", choices=MAIN_ACTIONS)
+        result: str = inquirer3.list_input(message="Select action", choices=MAIN_ACTIONS)
+        return result
     except KeyboardInterrupt:
         return None
 
 
 def text(message: str, default: str = "") -> str | None:
     try:
-        return inquirer3.text(message=message, default=default or None)
+        result: str = inquirer3.text(message=message, default=default or None)
+        return result
     except KeyboardInterrupt:
         return None
 
@@ -56,14 +58,15 @@ def integer(message: str, default: int = 1) -> int | None:
 
 def confirm(message: str, default: bool = False) -> bool:
     try:
-        return inquirer3.confirm(message=message, default=default)
+        result: bool = inquirer3.confirm(message=message, default=default)
+        return result
     except KeyboardInterrupt:
         return False
 
 
 def editor(message: str) -> str | None:
     try:
-        result = inquirer3.editor(message=message)
+        result: str = inquirer3.editor(message=message)
         if result:
             return result.rstrip("\n")
         return None
@@ -75,34 +78,47 @@ def select(message: str, choices: list[str]) -> str | None:
     if not choices:
         return None
     try:
-        return inquirer3.list_input(message=message, choices=choices)
+        result: str = inquirer3.list_input(message=message, choices=choices)
+        return result
     except KeyboardInterrupt:
         return None
 
 
 def select_predicate_type() -> str | None:
     try:
-        return inquirer3.list_input(
+        result: str = inquirer3.list_input(
             message="Predicate type",
             choices=PREDICATE_CHOICES,
         )
+        return result
     except KeyboardInterrupt:
         return None
 
 
 def select_operation() -> str | None:
     try:
-        return inquirer3.list_input(
+        result: str = inquirer3.list_input(
             message="Edge operation",
             choices=OPERATION_CHOICES,
         )
+        return result
     except KeyboardInterrupt:
         return None
 
 
-def select_node(states: list[int], message: str = "Select node") -> int | None:
-    if not states:
+def _node_choice(node: Node, max_title: int = 40) -> tuple[str, int]:
+    title = node.title
+    if len(title) > max_title:
+        title = title[: max_title - 3] + "..."
+    return (f"[{node.state}] {title}", node.state)
+
+
+def select_node(nodes: list[Node], message: str = "Select node") -> int | None:
+    if not nodes:
         return None
-    choices = [str(s) for s in sorted(states)]
-    answer = select(message, choices)
-    return int(answer) if answer else None
+    choices = [_node_choice(n) for n in sorted(nodes, key=lambda n: n.state)]
+    try:
+        result: int = inquirer3.list_input(message=message, choices=choices)
+        return result
+    except KeyboardInterrupt:
+        return None

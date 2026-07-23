@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Literal, cast
+
 from itsreg_builder.models.repository import ScriptRepository
 from itsreg_builder.models.script import (
     AlwaysPredicate,
@@ -8,6 +11,7 @@ from itsreg_builder.models.script import (
     ExactPredicate,
     Message,
     Node,
+    Predicate,
     RegexPredicate,
     Script,
 )
@@ -15,28 +19,32 @@ from itsreg_builder.views import display, prompts
 
 
 class ScriptController:
-    def __init__(self, repository: ScriptRepository):
+    def __init__(self, repository: ScriptRepository) -> None:
         self.repo = repository
-        self.script: Script | None = None
+        self.script: Script = Script(desc="")
 
     def run(self) -> None:
-        self.script = self.repo.load()
+        loaded = self.repo.load()
 
-        if self.script is None:
-            display.info("No script found. Starting creation wizard...\n")
-            self.script = self._wizard_create()
+        if loaded is None:
+            display.info("No script found. Creating a new one.\n")
+            desc = prompts.text("Script description", default="My script")
+            if not desc:
+                desc = "My script"
+            self.script = Script(desc=desc)
             self._save()
-            display.success("Script created and saved!")
+            display.success("Script created!")
         else:
+            self.script = loaded
             display.success(f"Loaded script from {self.repo.path}")
 
-        display.show_summary(self.script)
+        display.show_header(self.script)
         self._main_loop()
 
     # -- main loop --
 
     def _main_loop(self) -> None:
-        handlers = {
+        handlers: dict[str, Callable[[], None]] = {
             "Add node": self._add_node,
             "Edit node": self._edit_node,
             "Delete node": self._delete_node,
@@ -44,9 +52,8 @@ class ScriptController:
             "Delete edge": self._delete_edge,
             "Add entry": self._add_entry,
             "Delete entry": self._delete_entry,
-            "Show script": self._show_script,
-            "Show JSON": self._show_json,
-            "Creation wizard": self._run_wizard,
+            "Show graph": self._show_graph,
+            "View node": self._view_node,
         }
 
         while True:
@@ -65,80 +72,16 @@ class ScriptController:
         self.repo.save(self.script)
         display.info(f"Saved to {self.repo.path}")
 
-    # -- wizard --
-
-    def _wizard_create(self) -> Script:
-        desc = prompts.text("Script description", default="My script")
-        if not desc:
-            desc = "My script"
-
-        start_state = prompts.integer("Start state number", default=1) or 1
-
-        nodes_by_state: dict[int, Node] = {}
-        in_progress: set[int] = set()
-        self._build_node_recursive(nodes_by_state, start_state, in_progress)
-
-        entries = self._prompt_entries_batch(nodes_by_state, start_state)
-
-        return Script(
-            desc=desc,
-            nodes=list(nodes_by_state.values()),
-            entries=entries,
-        )
-
-    def _build_node_recursive(
-        self,
-        nodes_by_state: dict[int, Node],
-        state: int,
-        in_progress: set[int],
-    ) -> None:
-        if state in nodes_by_state:
-            display.info(f"Node {state} already exists, skipping.")
-            return
-        if state in in_progress:
-            display.info(f"Node {state} is being built (cycle detected), skipping.")
-            return
-
-        in_progress.add(state)
-        display.info(f"\n--- Building node {state} ---")
-
-        title = prompts.text(f"Node {state} - Title", default=f"state-{state}")
-        if not title:
-            title = f"state-{state}"
-
-        messages = self._prompt_messages(state)
-        options = self._prompt_options(state)
-        edges: list[Edge] = []
-
-        edge_index = 1
-        while prompts.confirm(f"Node {state}: Add outgoing edge #{edge_index}?", default=False):
-            edge = self._prompt_single_edge(state, edge_index)
-            if edge:
-                edges.append(edge)
-                to_state = edge.to
-                if to_state not in nodes_by_state and to_state not in in_progress:
-                    self._build_node_recursive(nodes_by_state, to_state, in_progress)
-                elif to_state in nodes_by_state:
-                    display.info(f"  -> Node {to_state} already exists.")
-                else:
-                    display.info(f"  -> Cycle to node {to_state}.")
-                edge_index += 1
-
-        node = Node(
-            state=state,
-            title=title,
-            messages=messages,
-            edges=edges,
-            options=options,
-        )
-        nodes_by_state[state] = node
-        in_progress.discard(state)
+    # -- shared prompts --
 
     def _prompt_messages(self, state: int | None = None) -> list[Message]:
         prefix = f"Node {state}: " if state is not None else ""
         messages: list[Message] = []
         while True:
-            label = f"{prefix}Message text (opens editor)" if not messages else f"{prefix}Next message (opens editor)"
+            if not messages:
+                label = f"{prefix}Message text (opens editor)"
+            else:
+                label = f"{prefix}Next message (opens editor)"
             text = prompts.editor(label)
             if text:
                 messages.append(Message(text=text))
@@ -165,6 +108,7 @@ class ScriptController:
         if pred_type is None:
             return None
 
+        predicate: Predicate
         if pred_type == "always":
             predicate = AlwaysPredicate()
         elif pred_type == "exact":
@@ -186,39 +130,11 @@ class ScriptController:
         if operation is None:
             return None
 
-        return Edge(predicate=predicate, to=to_state, operation=operation)
-
-    def _prompt_entries_batch(
-        self, nodes_by_state: dict[int, Node], default_start: int
-    ) -> list[Entry]:
-        entries: list[Entry] = []
-        states = set(nodes_by_state.keys())
-
-        while True:
-            default_key = "start" if not entries else ""
-            key = prompts.text("Entry key (e.g. 'start')", default=default_key)
-            if not key:
-                break
-
-            start = prompts.integer("Entry start state", default=default_start)
-            if start is None:
-                break
-            if start not in states:
-                display.warning(
-                    f"State {start} does not exist. "
-                    f"Available: {sorted(states)}"
-                )
-                continue
-
-            entries.append(Entry(key=key, start=start))
-            if not prompts.confirm("Add another entry?", default=False):
-                break
-
-        if not entries:
-            entries.append(Entry(key="start", start=default_start))
-            display.info("  Default entry added: /start -> state " + str(default_start))
-
-        return entries
+        return Edge(
+            predicate=predicate,
+            to=to_state,
+            operation=cast(Literal["noop", "save", "append"], operation),
+        )
 
     # -- CRUD: nodes --
 
@@ -235,25 +151,41 @@ class ScriptController:
         if not title:
             title = f"state-{state}"
 
-        messages = self._prompt_messages()
-        options = self._prompt_options()
+        messages = self._prompt_messages(state)
+        options = self._prompt_options(state)
 
-        node = Node(state=state, title=title, messages=messages, options=options)
+        edges: list[Edge] = []
+        edge_index = 1
+        while prompts.confirm(f"Node {state}: Add outgoing edge #{edge_index}?", default=False):
+            edge = self._prompt_single_edge(state, edge_index)
+            if edge:
+                edges.append(edge)
+                edge_index += 1
+
+        node = Node(
+            state=state,
+            title=title,
+            messages=messages,
+            edges=edges,
+            options=options,
+        )
         self.script.add_node(node)
         self._save()
         display.success(f"Node {state} added.")
 
     def _edit_node(self) -> None:
-        states = [n.state for n in self.script.nodes]
-        if not states:
+        if not self.script.nodes:
             display.warning("No nodes to edit.")
             return
 
-        state = prompts.select_node(states, "Select node to edit")
+        state = prompts.select_node(self.script.nodes, "Select node to edit")
         if state is None:
             return
 
         node = self.script.get_node(state)
+        if node is None:
+            return
+
         display.show_node(node)
 
         field = prompts.select(
@@ -278,17 +210,16 @@ class ScriptController:
         display.success(f"Node {state} updated.")
 
     def _delete_node(self) -> None:
-        states = [n.state for n in self.script.nodes]
-        if not states:
+        if not self.script.nodes:
             display.warning("No nodes to delete.")
             return
 
-        state = prompts.select_node(states, "Select node to delete")
+        state = prompts.select_node(self.script.nodes, "Select node to delete")
         if state is None:
             return
 
         if not prompts.confirm(
-            f"Delete node {state}? This also removes edges pointing to it.",
+            f"Delete node {state}? Edges pointing to it will be removed.",
             default=False,
         ):
             return
@@ -300,16 +231,18 @@ class ScriptController:
     # -- CRUD: edges --
 
     def _add_edge(self) -> None:
-        states = [n.state for n in self.script.nodes]
-        if not states:
+        if not self.script.nodes:
             display.warning("No nodes. Add a node first.")
             return
 
-        state = prompts.select_node(states, "Add edge to which node?")
+        state = prompts.select_node(self.script.nodes, "Add edge to which node?")
         if state is None:
             return
 
         node = self.script.get_node(state)
+        if node is None:
+            return
+
         edge_index = len(node.edges) + 1
         edge = self._prompt_single_edge(state, edge_index)
         if edge is None:
@@ -320,16 +253,19 @@ class ScriptController:
         display.success(f"Edge added to node {state} -> {edge.to}.")
 
     def _delete_edge(self) -> None:
-        states = [n.state for n in self.script.nodes if n.edges]
-        if not states:
+        nodes_with_edges = [n for n in self.script.nodes if n.edges]
+        if not nodes_with_edges:
             display.warning("No nodes with edges.")
             return
 
-        state = prompts.select_node(states, "Delete edge from which node?")
+        state = prompts.select_node(nodes_with_edges, "Delete edge from which node?")
         if state is None:
             return
 
         node = self.script.get_node(state)
+        if node is None:
+            return
+
         display.show_edges(node)
 
         choices = [str(i) for i in range(1, len(node.edges) + 1)]
@@ -354,12 +290,11 @@ class ScriptController:
                 display.error(f"Entry '{key}' already exists.")
                 return
 
-        states = [n.state for n in self.script.nodes]
-        if not states:
+        if not self.script.nodes:
             display.warning("No nodes. Add a node first.")
             return
 
-        state = prompts.select_node(states, "Entry start state")
+        state = prompts.select_node(self.script.nodes, "Entry start state")
         if state is None:
             return
 
@@ -388,36 +323,37 @@ class ScriptController:
 
     # -- display --
 
-    def _show_script(self) -> None:
-        display.show_summary(self.script)
-
-    def _show_json(self) -> None:
-        display.show_json(self.script)
-
-    # -- wizard on existing script --
-
-    def _run_wizard(self) -> None:
-        next_st = self.script.next_state()
-        start = prompts.integer("Start building from state", default=next_st)
-        if start is None:
+    def _show_graph(self) -> None:
+        if not self.script.nodes:
+            display.warning("No nodes yet.")
             return
 
-        if self.script.has_node(start):
-            display.warning(f"Node {start} already exists. Pick a new state number.")
+        mode = prompts.select("Graph view", ["Full (spine)", "From node (tree)"])
+        if mode is None:
             return
 
-        existing = {n.state: n for n in self.script.nodes}
-        in_progress: set[int] = set(existing.keys())
-        nodes_by_state: dict[int, Node] = dict(existing)
-
-        self._build_node_recursive(nodes_by_state, start, in_progress)
-
-        new_nodes = [n for s, n in nodes_by_state.items() if s not in existing]
-        for node in new_nodes:
-            self.script.nodes.append(node)
-
-        if new_nodes:
-            self._save()
-            display.success(f"{len(new_nodes)} new node(s) added.")
+        if mode == "Full (spine)":
+            display.show_graph_spine(self.script)
         else:
-            display.info("No new nodes created.")
+            state = prompts.select_node(self.script.nodes, "Root node for subgraph")
+            if state is None:
+                return
+            depth = prompts.integer("Tree depth", default=3)
+            if depth is None:
+                depth = 3
+            display.show_graph_tree(self.script, state, depth)
+
+    def _view_node(self) -> None:
+        if not self.script.nodes:
+            display.warning("No nodes yet.")
+            return
+
+        state = prompts.select_node(self.script.nodes, "Select node to view")
+        if state is None:
+            return
+
+        node = self.script.get_node(state)
+        if node is None:
+            return
+
+        display.show_node(node)

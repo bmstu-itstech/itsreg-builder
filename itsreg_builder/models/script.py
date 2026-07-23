@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -24,7 +24,7 @@ class RegexPredicate(BaseModel):
 
 
 Predicate = Annotated[
-    Union[AlwaysPredicate, ExactPredicate, RegexPredicate],
+    AlwaysPredicate | ExactPredicate | RegexPredicate,
     Field(discriminator="type"),
 ]
 
