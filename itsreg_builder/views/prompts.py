@@ -5,34 +5,34 @@ import inquirer3  # type: ignore[import-untyped]
 from itsreg_builder.models.script import Node
 
 MAIN_ACTIONS = [
-    "Add node",
-    "Edit node",
-    "Delete node",
-    "Add edge",
-    "Delete edge",
-    "Add entry",
-    "Delete entry",
-    "Show graph",
-    "View node",
-    "Exit",
+    "Добавить узел",
+    "Редактировать узел",
+    "Удалить узел",
+    "Добавить ребро",
+    "Удалить ребро",
+    "Добавить точку входа",
+    "Удалить точку входа",
+    "Показать граф",
+    "Показать узел",
+    "Выход",
 ]
 
 PREDICATE_CHOICES = [
-    ("Always (any message)", "always"),
-    ("Exact text match", "exact"),
-    ("Regex pattern", "regex"),
+    ("Безусловный", "always"),
+    ("Совпадение по тексту", "exact"),
+    ("Совпадение по регулярному выражению", "regex"),
 ]
 
 OPERATION_CHOICES = [
-    ("noop  - no action (menus, intermediate nodes)", "noop"),
-    ("save  - save user response (overwrites)", "save"),
-    ("append - append to previous (multi-select)", "append"),
+    ("noop   - без действия", "noop"),
+    ("save   - сохранить ответ", "save"),
+    ("append - добавить ответ в конец", "append"),
 ]
 
 
 def select_main_action() -> str | None:
     try:
-        result: str = inquirer3.list_input(message="Select action", choices=MAIN_ACTIONS)
+        result: str = inquirer3.list_input(message="Выберите действие", choices=MAIN_ACTIONS)
         return result
     except KeyboardInterrupt:
         return None
@@ -87,7 +87,7 @@ def select(message: str, choices: list[str]) -> str | None:
 def select_predicate_type() -> str | None:
     try:
         result: str = inquirer3.list_input(
-            message="Predicate type",
+            message="Тип предиката",
             choices=PREDICATE_CHOICES,
         )
         return result
@@ -98,7 +98,7 @@ def select_predicate_type() -> str | None:
 def select_operation() -> str | None:
     try:
         result: str = inquirer3.list_input(
-            message="Edge operation",
+            message="Действие при переходе по ребру",
             choices=OPERATION_CHOICES,
         )
         return result
@@ -113,7 +113,7 @@ def _node_choice(node: Node, max_title: int = 40) -> tuple[str, int]:
     return (f"[{node.state}] {title}", node.state)
 
 
-def select_node(nodes: list[Node], message: str = "Select node") -> int | None:
+def select_node(nodes: list[Node], message: str = "Выберите узел") -> int | None:
     if not nodes:
         return None
     choices = [_node_choice(n) for n in sorted(nodes, key=lambda n: n.state)]

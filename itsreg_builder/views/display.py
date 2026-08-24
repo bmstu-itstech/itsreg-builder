@@ -44,8 +44,8 @@ def show_header(script: Script) -> None:
     console.print(
         Panel(
             f"[bold]{script.desc}[/bold]\n"
-            f"Nodes: {len(script.nodes)}  |  Entries: {len(script.entries)}",
-            title="Script",
+            f"Узлы: {len(script.nodes)}  |  Точки входа: {len(script.entries)}",
+            title="Сценарий",
             border_style="cyan",
         )
     )
@@ -60,35 +60,35 @@ def show_node(node: Node) -> None:
     lines.append(f"[bold cyan][{node.state}] {node.title}[/bold cyan]")
     lines.append("")
 
-    lines.append("[bold]Messages:[/bold]")
+    lines.append("[bold]Сообщения:[/bold]")
     for msg in node.messages:
         for line in msg.text.splitlines():
             lines.append(f"  {line}")
     lines.append("")
 
     if node.options:
-        lines.append("[bold]Options:[/bold]  " + ", ".join(f"[{o}]" for o in node.options))
+        lines.append("[bold]Кнопки:[/bold]  " + ", ".join(f"[{o}]" for o in node.options))
         lines.append("")
 
     if node.edges:
-        lines.append("[bold]Edges:[/bold]")
+        lines.append("[bold]Ребра:[/bold]")
         for i, edge in enumerate(node.edges, 1):
             lines.append(f"  #{i}: \\[{predicate_label(edge)}] -> {edge.to}  ({edge.operation})")
     else:
-        lines.append("[dim]No outgoing edges (terminal node)[/dim]")
+        lines.append("[dim]Нет исходящих ребер[/dim]")
 
     console.print(Panel("\n".join(lines), border_style="cyan"))
 
 
 def show_edges(node: Node) -> None:
     if not node.edges:
-        warning(f"Node {node.state} has no edges.")
+        warning(f"Узел {node.state} не имеет исходящих ребер.")
         return
-    table = Table(title=f"Edges of node {node.state}")
+    table = Table(title=f"Ребра узла {node.state}")
     table.add_column("#", justify="center", width=4)
-    table.add_column("Predicate", min_width=15)
-    table.add_column("To", justify="center", width=6)
-    table.add_column("Operation", width=10)
+    table.add_column("Предикат", min_width=15)
+    table.add_column("К узлу", justify="center", width=6)
+    table.add_column("Действие", width=10)
     for i, edge in enumerate(node.edges, 1):
         table.add_row(str(i), predicate_label(edge), str(edge.to), edge.operation)
     console.print(table)
@@ -105,9 +105,9 @@ def show_graph_spine(script: Script) -> None:
     lines: list[str] = []
 
     if idx.entry_list:
-        lines.append("[bold]Entries:[/bold]")
+        lines.append("[bold]Точки входа:[/bold]")
         for key, start in idx.entry_list:
-            lines.append(f"  /{key} -> state {start}")
+            lines.append(f"  /{key} -> {start}")
         lines.append("")
 
     reachable = [s for s in idx.order if s not in unreachable]
@@ -115,7 +115,7 @@ def show_graph_spine(script: Script) -> None:
 
     if unreachable:
         lines.append("")
-        lines.append("[bold yellow]Unreachable:[/bold yellow]")
+        lines.append("[bold yellow]Недостижимо:[/bold yellow]")
         orphans = sorted(unreachable)
         lines.extend(_spine_section(idx, orphans, cyclic, "  "))
 
@@ -145,16 +145,12 @@ def _spine_section(
         spine_edges = [e for e in forwards if e.to == nxt]
         if len(spine_edges) == 1:
             e = spine_edges[0]
-            lines.append(f"{indent}  │  [magenta]\\[{predicate_label(e)}][/magenta]")
+            lines.append(f"{indent}  │ [magenta]\\[{predicate_label(e)}][/magenta]")
 
         for e in forwards:
             if e.to == nxt and len(spine_edges) == 1:
                 continue
             lines.append(f"{indent}  └─[magenta]\\[{predicate_label(e)}][/magenta]→ {e.to}")
-
-        for e in idx.back_edges(s):
-            pred = predicate_label(e)
-            lines.append(f"{indent}  ╭─[magenta]\\[{pred}][/magenta]→ {e.to} [yellow]↺[/yellow]")
 
         if i < last:
             lines.append(f"{indent}  │")
@@ -169,7 +165,7 @@ def show_graph_tree(script: Script, root: int, depth: int = 3) -> None:
     idx = GraphIndex(script)
     node = idx.by_state.get(root)
     if node is None:
-        error(f"Node {root} not found.")
+        error(f"Узел {root} не найден.")
         return
 
     cyclic = idx.cycle_states()
@@ -211,7 +207,7 @@ def _walk_tree(
 
     if depth >= max_depth:
         if node.edges:
-            lines.append(f"{prefix}   [dim]... ({len(node.edges)} edge(s))[/dim]")
+            lines.append(f"{prefix}   [dim]... ({len(node.edges)} ребер)[/dim]")
         return
 
     edges = node.edges
